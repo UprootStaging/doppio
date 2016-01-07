@@ -24,7 +24,7 @@ addons:
   firefox: "latest"
   apt:
     packages:
-      - oracle-java8-installer
+      - openjdk-8-jdk
 
 before_script:
   - export DISPLAY=:99.0
