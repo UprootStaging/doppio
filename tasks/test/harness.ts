@@ -19,32 +19,49 @@ let isRelease = DoppioJVM.VM.JVM.isReleaseBuild();
 // https://zerokspot.com/weblog/2013/07/12/delay-test-execution-in-karma/
 __karma__.loaded = function() {};
 
+let workerMsgCount = 0;
+const workerMsgInfo = [];
+
+function registerWorkerListener(worker: Worker) {
+  console.log("Registering listener");
+  worker.addEventListener('message', (msg: MessageEvent) => {
+    const data = msg.data;
+    const info = workerMsgInfo[data.id];
+    delete(workerMsgInfo[data.id]);
+    console.log("Received msg from worker: ", data);
+    if (data instanceof TestResultMessage) {
+      info.cb(data.err, data.stack, data.actual, data.expected);
+    } else if (data instanceof TestResultMessage) {
+      info.cb(data.listing);
+    }
+  });
+
+}
+
 function runTestWebWorker(index: number, cb: (err: string, stack?: string, actual?: string, expected?: string) => void): void {
-  let msg: RunTestMessage = {
+  const msg: RunTestMessage = {
     type: MessageType.RUN_TEST,
     index: index
-  }, listener = function(msg: MessageEvent) {
-    let data = <TestResultMessage> msg.data;
-    cb(data.err, data.stack, data.actual, data.expected);
   };
-  worker.addEventListener('message', listener);
-  worker.postMessage(msg);
+  workerSendMessage(msg, cb);
 }
 
 function runTestLocally(index: number, cb: (err?: string, stack?: string, actual?: string, expected?: string) => void): void {
   commonRunTest(tests[index], (err, actual, expected) => cb(err ? "" + err : null, err ? err.stack : null, actual, expected));
 }
 
-function getTestsWebWorker(cb: (tests: string[]) => void): void {
-  let msg: SetupMessage = {
-    type: MessageType.SETUP
-  }, listener = function(msg: MessageEvent) {
-    worker.removeEventListener('message', listener);
-    let data = <TestListingMessage> msg.data;
-    cb(data.listing);
-  };
-  worker.addEventListener('message', listener);
+function workerSendMessage(msg: Message, cbFunction: any) {
+  const id = workerMsgCount++;
+  workerMsgInfo[id] = {cb: cbFunction};
+  console.log("Sending message", id);
   worker.postMessage(msg);
+}
+
+function getTestsWebWorker(cb: (tests: string[]) => void): void {
+  const msg: SetupMessage = {
+    type: MessageType.SETUP
+  };
+  workerSendMessage(msg, cb);
 }
 
 function getTestsLocally(cb: (tests: string[]) => void): void {
@@ -65,6 +82,7 @@ var supportsWorkers = typeof Worker !== 'undefined',
 export default function runTests() {
   if (supportsWorkers) {
     worker = new Worker(`../build/test${isRelease ? '-release' : '-dev'}/harness_webworker.js`);
+    registerWorkerListener(worker);
   }
 
   getTests((tests: string[]): void => {
