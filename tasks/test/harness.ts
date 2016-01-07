@@ -12,7 +12,7 @@ import path = require('path');
 import DoppioJVM = require('../../src/doppiojvm');
 import DoppioTest = DoppioJVM.Testing.DoppioTest;
 import {getTests as localGetTests, runTest as commonRunTest} from './harness_common';
-import {MessageType, RunTestMessage, SetupMessage, TestListingMessage, TestResultMessage} from './messages';
+import {Message, MessageType, RunTestMessage, SetupMessage, TestListingMessage, TestResultMessage} from './messages';
 let isRelease = DoppioJVM.VM.JVM.isReleaseBuild();
 
 // HACK: Delay test execution until backends load.
@@ -20,7 +20,7 @@ let isRelease = DoppioJVM.VM.JVM.isReleaseBuild();
 __karma__.loaded = function() {};
 
 let workerMsgCount = 0;
-const workerMsgInfo = [];
+const workerMsgInfo:any[] = [];
 
 function registerWorkerListener(worker: Worker) {
   console.log("Registering listener");
@@ -29,10 +29,15 @@ function registerWorkerListener(worker: Worker) {
     const info = workerMsgInfo[data.id];
     delete(workerMsgInfo[data.id]);
     console.log("Received msg from worker: ", data);
-    if (data instanceof TestResultMessage) {
-      info.cb(data.err, data.stack, data.actual, data.expected);
-    } else if (data instanceof TestResultMessage) {
-      info.cb(data.listing);
+    switch (data.type) {
+      case MessageType.TEST_RESULT: {
+        const result = <TestResultMessage> data;
+        info.cb(result.err, result.stack, result.actual, result.expected);
+      }
+      case MessageType.TEST_LISTING: {
+        const result = <TestListingMessage> data;
+        info.cb(result.listing);
+      }
     }
   });
 
@@ -41,6 +46,7 @@ function registerWorkerListener(worker: Worker) {
 function runTestWebWorker(index: number, cb: (err: string, stack?: string, actual?: string, expected?: string) => void): void {
   const msg: RunTestMessage = {
     type: MessageType.RUN_TEST,
+    id : workerMsgCount++,
     index: index
   };
   workerSendMessage(msg, cb);
@@ -51,15 +57,15 @@ function runTestLocally(index: number, cb: (err?: string, stack?: string, actual
 }
 
 function workerSendMessage(msg: Message, cbFunction: any) {
-  const id = workerMsgCount++;
-  workerMsgInfo[id] = {cb: cbFunction};
-  console.log("Sending message", id);
+  workerMsgInfo[msg.id] = {cb: cbFunction};
+  console.log("Sending message", msg.id);
   worker.postMessage(msg);
 }
 
 function getTestsWebWorker(cb: (tests: string[]) => void): void {
   const msg: SetupMessage = {
-    type: MessageType.SETUP
+    type: MessageType.SETUP,
+    id : workerMsgCount++
   };
   workerSendMessage(msg, cb);
 }

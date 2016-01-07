@@ -32,6 +32,7 @@ onmessage = function(e) {
         state = State.WAITING_FOR_TEST;
         let results: TestResultMessage = {
           type: MessageType.TEST_RESULT,
+          id: data.id,
           err: err ? "" + err : null,
           stack: err ? err.stack : null,
           actual: actual,
@@ -53,6 +54,7 @@ onmessage = function(e) {
 
         let listing: TestListingMessage = {
           type: MessageType.TEST_LISTING,
+          id: data.id,
           listing: tests.map((test) => test.cls)
         };
         (<any> postMessage)(listing);
