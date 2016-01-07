@@ -20,7 +20,8 @@ let state = State.INITIAL,
  * Test harness portion that runs in a WebWorker.
  */
 onmessage = function(e) {
-  let data: Message = e.data;
+  const data: Message = e.data;
+  console.log("Worker rcvd message", data.id);
   switch (data.type) {
     case MessageType.RUN_TEST: {
       if (state !== State.WAITING_FOR_TEST) {
