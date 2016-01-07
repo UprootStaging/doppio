@@ -23,12 +23,10 @@ let workerMsgCount = 0;
 const workerMsgInfo:any[] = [];
 
 function registerWorkerListener(worker: Worker) {
-  console.log("Registering listener");
   worker.addEventListener('message', (msg: MessageEvent) => {
     const data = msg.data;
     const info = workerMsgInfo[data.id];
     delete(workerMsgInfo[data.id]);
-    console.log("Received msg from worker: ", data);
     switch (data.type) {
       case MessageType.TEST_RESULT: {
         const result = <TestResultMessage> data;
@@ -58,7 +56,6 @@ function runTestLocally(index: number, cb: (err?: string, stack?: string, actual
 
 function workerSendMessage(msg: Message, cbFunction: any) {
   workerMsgInfo[msg.id] = {cb: cbFunction};
-  console.log("Sending message", msg.id);
   worker.postMessage(msg);
 }
 
