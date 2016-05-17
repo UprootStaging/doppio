@@ -80,6 +80,12 @@ let parser = new OptionParser({
       optDesc: ':<directories and zip/jar files separated by :>',
       desc: 'set search path for bootstrap classes and resources'
     }
+  },
+  XX: {
+    '+PrintCompilation': {
+      type: ParseType.COLON_VALUE_OR_FLAG_SYNTAX,
+      desc: 'Print JIT compilation details'
+    }
   }
 });
 
@@ -101,6 +107,7 @@ function java(args: string[], opts: JVMCLIOptions,
   let parsedArgs = parser.parse(args),
     standard = parsedArgs['default'],
     nonStandard = parsedArgs['X'],
+    hidden = parsedArgs['XX'],
     jvmState: JVM;
 
   // System properties.
@@ -203,6 +210,8 @@ function java(args: string[], opts: JVMCLIOptions,
       launchJvm(standard, opts, jvmState, doneCb, jvmStarted);
     }
   });
+
+  jvmState.setPrintJITCompilation(hidden.flag('+PrintCompilation', false));
 
   let vtraceMethods = nonStandard.stringOption('vtrace-methods', null);
   if (vtraceMethods) {
