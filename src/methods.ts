@@ -15,6 +15,8 @@ import StringOutputStream = require('./StringOutputStream');
 import JVMTypes = require('../includes/JVMTypes');
 import global = require('./global');
 import {JitInfo, opJitInfo} from './jit';
+import logging = require('./logging');
+import opcodes = require('./opcodes');
 
 declare var RELEASE: boolean;
 if (typeof RELEASE === 'undefined') global.RELEASE = false;
@@ -357,7 +359,7 @@ export class Method extends AbstractMethodField {
    */
   private numBBEntries = 0;
 
-  private compiledFunctions: Function[] = [];
+  public compiledFunctions: Function[] = [];
   private failedCompile: boolean[] = [];
 
   constructor(cls: ClassData.ReferenceClassData<JVMTypes.java_lang_Object>, constantPool: ConstantPool.ConstantPool, slot: number, byteStream: ByteStream) {
@@ -462,6 +464,55 @@ export class Method extends AbstractMethodField {
     return this.code;
   }
 
+  public run(pc: number, thread: threading.JVMThread, frame: threading.BytecodeStackFrame, codeBuffer: Buffer, jitUtil: any) {
+    if (this.numBBEntries <= 0) {
+      this.interpretWithJitCompile(pc, thread, frame, codeBuffer);
+    } else {
+      this.interpret(pc, thread, frame, codeBuffer);
+    }
+  }
+
+  private interpretWithJitCompile(pc: number, thread: threading.JVMThread, frame: threading.BytecodeStackFrame, codeBuffer: Buffer) {
+    if (!this.failedCompile[pc]) {
+      const compiledFunction = this.jitCompileFrom(pc, thread);
+      if (compiledFunction) {
+        this.rebuildJitRunner();
+        return;
+      } else {
+        this.failedCompile[pc] = true;
+      }
+    }
+    this.interpret(pc, thread, frame, codeBuffer);
+  }
+
+  public interpret(pc: number, thread: threading.JVMThread, frame: threading.BytecodeStackFrame, codeBuffer: Buffer) {
+
+    const op = codeBuffer.readUInt8(pc);
+    if (!RELEASE && logging.log_level === logging.VTRACE) {
+      logging.vtrace(`  ${pc} ${threading.annotateOpcode(op, this, codeBuffer, pc)}`);
+    }
+    opcodes.LookupTable[op](thread, frame, codeBuffer);
+  }
+
+  private rebuildJitRunner() {
+    let runner =`
+    switch(pc) {
+    `;
+
+    for (let i in this.compiledFunctions) {
+      runner += `case ${i}:`;
+    }
+    runner += `
+      this.compiledFunctions[pc](frame,thread,jitUtil);
+      break;
+    default:
+      this.interpretWithJitCompile(pc, thread, frame, codeBuffer);
+    }
+    `
+    const runnerFunc = new Function("pc, thread, frame, codeBuffer, jitUtil", runner);
+    this.run = runnerFunc.bind(this);
+  }
+
   public getOp(pc: number, codeBuffer: Buffer, thread: threading.JVMThread): any {
     if (this.numBBEntries <= 0) {
       if (!this.failedCompile[pc]) {
@@ -469,6 +520,7 @@ export class Method extends AbstractMethodField {
         if (!cachedCompiledFunction) {
           const compiledFunction = this.jitCompileFrom(pc, thread);
           if (compiledFunction) {
+            this.rebuildJitRunner();
             return compiledFunction;
           } else {
             this.failedCompile[pc] = true;

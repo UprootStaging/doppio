@@ -272,9 +272,9 @@ export class BytecodeStackFrame implements IStackFrame {
     if (thread.getJVM().isJITDisabled()) {
       // Interpret until we get the signal to return to the thread loop.
       while (!this.returnToThreadLoop) {
-        var opCode = code.readUInt8(this.pc);
+        const opCode = code.readUInt8(this.pc);
         if (!RELEASE && logging.log_level === logging.VTRACE) {
-          vtrace(`  ${this.pc} ${annotateOpcode(op, method, code, this.pc)}`);
+          vtrace(`  ${this.pc} ${annotateOpcode(opCode, method, code, this.pc)}`);
         }
         opcodeTable[opCode](thread, this, code);
         if (!RELEASE && !this.returnToThreadLoop && logging.log_level === logging.VTRACE) {
@@ -284,18 +284,7 @@ export class BytecodeStackFrame implements IStackFrame {
     } else {
       // Run until we get the signal to return to the thread loop.
       while (!this.returnToThreadLoop) {
-        var op = method.getOp(this.pc, code, thread);
-        if (typeof op === 'function') {
-          if (!RELEASE && logging.log_level === logging.VTRACE) {
-            vtrace(`  ${this.pc} running JIT compiled function:\n${op.toString()}`);
-          }
-          op(this, thread, jitUtil);
-        } else {
-          if (!RELEASE && logging.log_level === logging.VTRACE) {
-            vtrace(`  ${this.pc} ${annotateOpcode(op, method, code, this.pc)}`);
-          }
-          opcodeTable[op](thread, this, code);
-        }
+        method.run(this.pc, thread, this, code, jitUtil);
         if (!RELEASE && !this.returnToThreadLoop && logging.log_level === logging.VTRACE) {
           vtrace(`    S: [${logging.debug_vars(this.opStack.getRaw())}], L: [${logging.debug_vars(this.locals)}]`);
         }
